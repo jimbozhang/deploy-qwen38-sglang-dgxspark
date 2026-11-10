@@ -1,0 +1,2 @@
+# Local model overlays (vision.safetensors + symlinks into ~/pretrained)
+models/

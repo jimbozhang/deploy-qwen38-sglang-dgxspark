@@ -1,11 +1,15 @@
 #!/bin/bash
-# Start sglang with the DavidAU Heretic uncensored NVFP4 model.
+# Start sglang with the DavidAU Heretic uncensored NVFP4 model, with vision.
 # Original model by DavidAU, NVFP4 quantization by Solstice-AI.
+# The vision tower is grafted from the original BF16 checkpoint into an
+# overlay under models/ (see setup_heretic_vl.sh); ~/pretrained stays read-only.
 # No DFlash2 speculative decoding.
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODEL_ROOT="$HOME/pretrained"
 CACHE_DIR="$HOME/.cache/qwen38/sglang"
 MODEL_PATH="Solstice-AI/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-NVFP4"
+OVERLAY_DIR="$SCRIPT_DIR/models/heretic-735-882-vl"
 
 MODEL_DIR="$MODEL_ROOT/$MODEL_PATH"
 if [ ! -d "$MODEL_DIR" ]; then
@@ -15,23 +19,21 @@ if [ ! -d "$MODEL_DIR" ]; then
   exit 1
 fi
 
-# Ensure config is patched for sglang
-bash "$(dirname "$0")/patch_solstice_config.sh"
-
-# Patch chat template to accept 'high' and 'max' effort from Claude Code
-PATCHED_TEMPLATE="$CACHE_DIR/chat_template_patched_heretic.jinja"
-if [ ! -f "$PATCHED_TEMPLATE" ]; then
-  SOURCE_TEMPLATE="$MODEL_DIR/chat_template.jinja"
-  if [ ! -f "$SOURCE_TEMPLATE" ]; then
-    echo "Warning: No chat_template.jinja found, using RadixArk template"
-    SOURCE_TEMPLATE="$MODEL_ROOT/RadixArk/Qwen3.8-27B-NVFP4/chat_template.jinja"
-  fi
-  echo "Patching chat template..."
-  mkdir -p "$CACHE_DIR"
-  cp "$SOURCE_TEMPLATE" "$PATCHED_TEMPLATE"
-  sed -i "/resolved_reasoning_effort = reasoning_effort|default/a\\    {%- if resolved_reasoning_effort == 'high' %}\\n        {%- set resolved_reasoning_effort = 'medium' %}\\n    {%- elif resolved_reasoning_effort == 'max' %}\\n        {%- set resolved_reasoning_effort = 'xhigh' %}\\n    {%- endif %}" "$PATCHED_TEMPLATE"
-  echo "Patched: high->medium, max->xhigh"
+if [ ! -d "$OVERLAY_DIR" ]; then
+  echo "Error: Vision overlay not found: $OVERLAY_DIR"
+  echo "Build it first (downloads nothing, reads ~/pretrained):"
+  echo "  ./setup_heretic_vl.sh"
+  exit 1
 fi
+
+# Patch chat template for Claude Code (effort levels + tool_reference blocks)
+PATCHED_TEMPLATE="$CACHE_DIR/chat_template_patched_heretic.jinja"
+SOURCE_TEMPLATE="$OVERLAY_DIR/chat_template.jinja"
+if [ ! -f "$SOURCE_TEMPLATE" ]; then
+  echo "Warning: No chat_template.jinja found, using Solstice-AI template"
+  SOURCE_TEMPLATE="$MODEL_DIR/chat_template.jinja"
+fi
+bash "$SCRIPT_DIR/patch_chat_template.sh" "$SOURCE_TEMPLATE" "$PATCHED_TEMPLATE"
 
 docker run -d --name qwen38-sglang \
   --gpus all --ipc=host --shm-size=16g \
@@ -43,13 +45,14 @@ docker run -d --name qwen38-sglang \
   -e TRANSFORMERS_OFFLINE=1 \
   -e HF_HOME=/root/.cache/huggingface \
   -e TORCHINDUCTOR_CACHE_DIR=/cache/inductor \
-  -v "$MODEL_ROOT:/models:ro" \
+  -v "$MODEL_ROOT:/pretrained:ro" \
+  -v "$OVERLAY_DIR:/overlay:ro" \
   -v "$HOME/.cache/qwen38/hf:/root/.cache/huggingface" \
   -v "$CACHE_DIR:/cache" \
   lmsysorg/sglang:dev-qwen38-27b-dflash2 \
   python3 -m sglang.launch_server \
     --trust-remote-code \
-    --model-path "/models/$MODEL_PATH" \
+    --model-path /overlay \
     --chat-template "/cache/chat_template_patched_heretic.jinja" \
     --served-model-name qwen3.8-27b \
     --tp-size 1 \

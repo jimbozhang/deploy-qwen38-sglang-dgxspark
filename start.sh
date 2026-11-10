@@ -3,15 +3,11 @@
 MODEL_ROOT="$HOME/pretrained"
 CACHE_DIR="$HOME/.cache/qwen38/sglang"
 
-# Patch chat template to accept 'high' and 'max' effort from Claude Code
+# Patch chat template for Claude Code (effort levels + tool_reference blocks)
 PATCHED_TEMPLATE="$CACHE_DIR/chat_template_patched.jinja"
-if [ ! -f "$PATCHED_TEMPLATE" ]; then
-  echo "Patching chat template..."
-  mkdir -p "$CACHE_DIR"
-  cp "$MODEL_ROOT/RadixArk/Qwen3.8-27B-NVFP4/chat_template.jinja" "$PATCHED_TEMPLATE"
-  sed -i "/resolved_reasoning_effort = reasoning_effort|default/a\\    {%- if resolved_reasoning_effort == 'high' %}\\n        {%- set resolved_reasoning_effort = 'medium' %}\\n    {%- elif resolved_reasoning_effort == 'max' %}\\n        {%- set resolved_reasoning_effort = 'xhigh' %}\\n    {%- endif %}" "$PATCHED_TEMPLATE"
-  echo "Patched: high->medium, max->xhigh"
-fi
+bash "$(dirname "$0")/patch_chat_template.sh" \
+  "$MODEL_ROOT/RadixArk/Qwen3.8-27B-NVFP4/chat_template.jinja" \
+  "$PATCHED_TEMPLATE"
 
 docker run -d --name qwen38-sglang \
   --gpus all --ipc=host --shm-size=16g \
