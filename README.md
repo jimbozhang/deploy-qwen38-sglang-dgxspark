@@ -67,7 +67,63 @@ curl http://localhost:8000/v1/models
 
 ## 4. Configure Claude Code
 
-Copy `settings.json` to your Claude Code settings, replacing `192.168.31.51` with your server's LAN IP.
+Add the following to your Claude Code settings file (`~/.claude/settings.json`
+on Linux/macOS, `%USERPROFILE%\.claude\settings.json` on Windows).
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://<server's lan ip>:8000",
+    "ANTHROPIC_API_KEY": "sk-local-no-key-needed",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "qwen3.8-27b",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "qwen3.8-27b",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "qwen3.8-27b",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "qwen3.8-27b",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "120000",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "130000",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "CLAUDE_CODE_USE_POWERSHELL_TOOL": "1"
+  },
+  "skipWebFetchPreflight": true,
+  "permissions": {
+    "allow": [
+      "Agent",
+      "Bash",
+      "Edit",
+      "PowerShell",
+      "WebFetch",
+      "Write"
+    ],
+    "defaultMode": "auto"
+  },
+  "model": "qwen3.8-27b",
+  "skipDangerousModePermissionPrompt": true,
+  "autoCompactEnabled": true
+}
+```
+
+`CLAUDE_CODE_USE_POWERSHELL_TOOL` is only needed on Windows clients; drop it on Linux/macOS.
+
+### Why the permissions are so permissive
+
+`permissions.allow` pre-approves every tool this setup uses (`Bash`, `Edit`,
+`Write`, `Agent`, ...), `defaultMode: auto` keeps sessions in auto mode, and
+`skipDangerousModePermissionPrompt` suppresses the warning prompt. Together
+they amount to unrestricted shell and file access. This is not a safe default;
+use it only with a local, trusted model and a trusted working directory.
+
+The reason is latency. In auto mode, a tool call that is not pre-approved
+requires a permission decision, and that decision is another model round trip.
+Against a local backend the extra round trip adds seconds to every tool call
+and can time out on long-context sessions, leaving the session stalled or the
+tool call dropped. Pre-approving the tool set removes that round trip and lets
+tool calls run immediately. If you do not hit these timeouts, narrow
+`permissions.allow` to the tools you actually need and drop
+`skipDangerousModePermissionPrompt`.
+
+The server itself binds `0.0.0.0:8000` without authentication, so anything on
+the LAN can use it. Keep it on a trusted network, or change `--host 0.0.0.0`
+to `--host 127.0.0.1` in the start scripts if only local access is needed.
 
 ## 5. Stop the Server
 
