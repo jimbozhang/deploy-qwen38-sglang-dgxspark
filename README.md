@@ -37,7 +37,7 @@ huggingface-cli download DavidAU/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Her
 The Heretic NVFP4 quant dropped the vision tower. `setup_heretic_vl.sh` builds
 a vision-enabled overlay under `models/heretic-735-882-vl/` (gitignored) by
 extracting the 333 `model.visual.*` tensors from the original checkpoint and
-symlinking the read-only NVFP4 text weights. `~/pretrained` is never modified.
+symlinking the read-only NVFP4 text weights.
 
 ```bash
 ./setup_heretic_vl.sh
